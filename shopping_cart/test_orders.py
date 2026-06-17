@@ -1,5 +1,5 @@
 import pytest
-from shopping_cart.orders import Order, Item, calculate_total
+from shopping_cart.orders import Order, Item, DynamicallyPricedItem, calculate_total
 
 @pytest.fixture
 def pencil():
@@ -136,10 +136,12 @@ def test_get_reward_points_for_order_total_below_threshold(order_one, simple_ite
     reward=order_one.get_reward_points()
     assert reward == 16
 
+@pytest.mark.orders
 def test_get_reward_points_for_empty_order(order_one):
     reward = order_one.get_reward_points()
     assert reward == 3
 
+@pytest.mark.orders
 def test_get_reward_points_for_order_total_exactly_at_threshold(order_one):
     item1 = Item("Marker", 3, 102.16)
     item2 = Item("Notebook", 4, 100)
@@ -149,3 +151,44 @@ def test_get_reward_points_for_order_total_exactly_at_threshold(order_one):
     order_one.add_item(item3)
     reward=order_one.get_reward_points()
     assert reward == 1010
+
+@pytest.mark.dpi
+def test_create_dpi():
+    dpi=DynamicallyPricedItem(10, 2)
+    assert dpi.id == 10
+    assert dpi.quantity == 2
+
+@pytest.mark.dpi
+def test_create_single_dpi():
+    dpi=DynamicallyPricedItem(10)
+    assert dpi.id == 10
+    assert dpi.quantity == 1
+
+@pytest.mark.dpi
+def test_calculate_item_total(mocker):
+    dpi = DynamicallyPricedItem(10, 3)
+    latest_price = mocker.patch.object(dpi, 'get_latest_price', return_value=10)
+    total = dpi.calculate_item_total()
+    assert total == 30
+    latest_price.assert_called_once()
+
+@pytest.mark.dpi
+def test_calculate_item_total_rounding(mocker):
+    dpi = DynamicallyPricedItem(10, 3)
+    latest_price = mocker.patch.object(dpi, 'get_latest_price', return_value=19.999)
+    total = dpi.calculate_item_total()
+    assert total == 60.0
+
+@pytest.mark.dpi
+def test_get_latest_price(mocker):
+    dpi = DynamicallyPricedItem(10, 2)
+    fake_response=mocker.Mock()
+    fake_response.json.return_value={"price": 15.5}
+    mock_requests=mocker.patch('shopping_cart.orders.requests.get', return_value=fake_response)
+    price = dpi.get_latest_price()
+    assert price == 15.5
+    mock_requests.assert_called_once_with('https://api.pandastore.com/getitem/10')
+    
+
+
+
